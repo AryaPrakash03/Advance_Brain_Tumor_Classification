@@ -9,6 +9,12 @@ from tensorflow.keras.layers import Input, Flatten, Dense, Dropout
 from tensorflow.keras.applications.vgg19 import VGG19
 
 
+BASE_DIR = os.path.dirname(__file__)
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+MODEL_PATH = os.getenv("MODEL_PATH", os.path.join(BASE_DIR, "vgg_unfrozen.h5"))
+
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 base_model = VGG19(include_top=False, input_shape=(240,240,3))
 x = base_model.output
 flat=Flatten()(x)
@@ -17,7 +23,7 @@ drop_out = Dropout(0.2)(class_1)
 class_2 = Dense(1152, activation='relu')(drop_out)
 output = Dense(2, activation='softmax')(class_2)
 model_03 = Model(base_model.inputs, output)
-model_03.load_weights('vgg_unfrozen.h5')
+model_03.load_weights(MODEL_PATH)
 app = Flask(__name__)
 
 print('Model loaded. Check http://127.0.0.1:5000/')
@@ -49,11 +55,14 @@ def index():
 @app.route('/predict', methods=['GET', 'POST'])
 def upload():
     if request.method == 'POST':
+        if 'file' not in request.files:
+            return "No file uploaded", 400
         f = request.files['file']
+        if not f.filename:
+            return "No file selected", 400
 
-        basepath = os.path.dirname(__file__)
         file_path = os.path.join(
-            basepath, 'uploads', secure_filename(f.filename))
+            UPLOAD_DIR, secure_filename(f.filename))
         f.save(file_path)
         value=getResult(file_path)
         result=get_className(value) 
@@ -62,4 +71,8 @@ def upload():
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", "5000")),
+        debug=os.getenv("FLASK_DEBUG", "0") == "1",
+    )
